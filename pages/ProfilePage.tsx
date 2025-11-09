@@ -3,7 +3,6 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import { FullUserProfile, Happening, UserProfile } from '../types';
 import { useAuth } from '../hooks/useAuth';
-import Spinner from '../components/ui/Spinner';
 import Button from '../components/ui/Button';
 import FeedItem from '../components/FeedItem';
 import toast from 'react-hot-toast';
@@ -13,12 +12,14 @@ import UserListModal from '../components/UserListModal';
 import EditProfileModal from '../components/EditProfileModal';
 import {
     UserPlusIcon, UserMinusIcon, CheckIcon, RssIcon, WifiIcon, HeartIcon,
-    NoSymbolIcon, ArrowPathIcon, PencilIcon
+    NoSymbolIcon, ArrowPathIcon, PencilIcon, EllipsisHorizontalIcon
 } from '@heroicons/react/24/outline';
+import ProfilePageSkeleton from '../components/ProfilePageSkeleton';
+import Dropdown from '../components/ui/Dropdown';
 
 const ProfilePage: React.FC = () => {
     const { username } = useParams<{ username: string }>();
-    const { profile: currentUserProfile } = useAuth();
+    const { profile: currentUserProfile, isViewOnly } = useAuth();
     const navigate = useNavigate();
     
     const [profile, setProfile] = useState<FullUserProfile | null>(null);
@@ -30,9 +31,10 @@ const ProfilePage: React.FC = () => {
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [coverImageError, setCoverImageError] = useState(false);
 
-    const fetchProfileData = useCallback(async () => {
+    const fetchProfileData = useCallback(async (isUpdate = false) => {
         if (!username || !currentUserProfile) return;
-        setLoading(true);
+        
+        if (!isUpdate) setLoading(true);
         setCoverImageError(false);
 
         try {
@@ -83,7 +85,7 @@ const ProfilePage: React.FC = () => {
             setProfile(fullProfile);
             setHappenings(profileHappenings.data as Happening[] || []);
             
-            if (currentUserProfile.id !== userData.id) {
+            if (currentUserProfile.id !== userData.id && userData.show_profile_views) {
                 await supabase.from('happenings').insert({ actor_id: currentUserProfile.id, action_type: 'VIEWED_PROFILE', target_id: userData.id });
             }
         } catch(error: any) {
@@ -98,13 +100,54 @@ const ProfilePage: React.FC = () => {
         fetchProfileData();
     }, [fetchProfileData]);
 
+    useEffect(() => {
+        if (!profile) return;
+
+        // Fix: Use ReturnType<typeof setTimeout> for browser compatibility.
+        let refreshTimeout: ReturnType<typeof setTimeout>;
+        const handleUpdate = (payload: any) => {
+            console.log('Change received, queuing profile data refresh', payload.table);
+            clearTimeout(refreshTimeout);
+            refreshTimeout = setTimeout(() => {
+                fetchProfileData(true);
+            }, 500); // Debounce updates by 500ms
+        };
+
+        const profileChannel = supabase.channel(`profile-page-${profile.id}`)
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'users', filter: `id=eq.${profile.id}` }, handleUpdate)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'happenings', filter: `or(actor_id.eq.${profile.id},target_id.eq.${profile.id})` }, handleUpdate)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'friendships', filter: `or(user_id_1.eq.${profile.id},user_id_2.eq.${profile.id})` }, handleUpdate)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'follows', filter: `or(follower_id.eq.${profile.id},following_id.eq.${profile.id})` }, handleUpdate)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'best_friends', filter: `or(user_id.eq.${profile.id},best_friend_id.eq.${profile.id})` }, handleUpdate)
+            .subscribe((status, err) => {
+                if (status === 'SUBSCRIBED') {
+                    console.log(`Subscribed to updates for ${profile.username}`);
+                }
+                if (err) {
+                    toast.error("Real-time connection failed.");
+                    console.error(`Subscription error for ${profile.username}:`, err);
+                }
+            });
+
+        return () => {
+            console.log(`Unsubscribing from updates for ${profile.username}`);
+            clearTimeout(refreshTimeout);
+            supabase.removeChannel(profileChannel);
+        };
+    }, [profile, fetchProfileData]);
+
+
     const handleAction = async (actionName: string, actionFn: () => Promise<any>, successMessage: string) => {
+        if (isViewOnly) {
+            toast.error("View-only accounts cannot perform actions.");
+            return;
+        }
         setActionLoading(actionName);
         try {
             const result = await actionFn();
             if (result && result.error) throw result.error;
             toast.success(successMessage);
-            await fetchProfileData();
+            // No need to call fetchProfileData here; the real-time subscription will handle it.
         } catch (error: any) {
             toast.error(error.message || 'An error occurred.');
         } finally {
@@ -153,6 +196,10 @@ const ProfilePage: React.FC = () => {
     ]), `Rejected best friend status from ${profile?.display_name}.`);
 
     const onHideUser = async () => {
+        if (isViewOnly) {
+            toast.error("View-only accounts cannot perform actions.");
+            return;
+        }
         setActionLoading('hide');
         try {
             const { count, error: countError } = await supabase
@@ -211,10 +258,14 @@ const ProfilePage: React.FC = () => {
     };
 
     if (loading || !profile) {
-        return <div className="flex justify-center mt-10"><Spinner size="lg" /></div>;
+        return <ProfilePageSkeleton />;
     }
 
     const isSelf = currentUserProfile?.id === profile.id;
+    
+    // Assumption: The view-only account has the username 'everett'.
+    // This is required to prevent other users from interacting with this specific account.
+    const isProfileOfViewOnlyUser = profile.username === 'everett';
 
     const StatItem: React.FC<{ label: string, value: number, onClick?: () => void }> = ({ label, value, onClick }) => (
         <button onClick={onClick} disabled={!onClick || value === 0} className="text-center disabled:cursor-default group">
@@ -236,7 +287,7 @@ const ProfilePage: React.FC = () => {
                 <EditProfileModal 
                     userProfile={profile}
                     onClose={() => setIsEditModalOpen(false)}
-                    onProfileUpdate={fetchProfileData}
+                    onProfileUpdate={() => { /* Real-time subscription handles updates */ }}
                 />
             )}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -296,59 +347,75 @@ const ProfilePage: React.FC = () => {
 
                     {!isSelf && (
                         <Card>
-                           {!profile.is_banned ? (
-                                <div className="flex flex-col gap-3">
-                                    {/* Friend Actions */}
-                                    {profile.is_friend ? (
-                                        <Button variant="danger" onClick={onRemoveFriend} loading={actionLoading === 'removeFriend'}><UserMinusIcon className="h-5 w-5 mr-2" />Remove Friend</Button>
-                                    ) : profile.is_friend_pending_me ? (
-                                        <Button onClick={onAcceptFriend} loading={actionLoading === 'acceptFriend'}><CheckIcon className="h-5 w-5 mr-2" />Accept Friend Request</Button>
-                                    ) : profile.is_friend_pending_them ? (
-                                        <Button disabled>Friend Request Sent</Button>
-                                    ) : (
-                                        <Button onClick={onAddFriend} loading={actionLoading === 'addFriend'}><UserPlusIcon className="h-5 w-5 mr-2" />Add Friend</Button>
-                                    )}
+                           {isProfileOfViewOnlyUser ? (
+                               <p className="text-center text-medium p-4">This user account is view-only and does not support interactions.</p>
+                           ) : !profile.is_banned ? (
+                                <>
+                                    <div className="flex gap-2">
+                                        {/* Friendship Button / Dropdown */}
+                                        {profile.is_friend ? (
+                                            <Dropdown trigger={
+                                                <Button variant="secondary" className="w-full"><CheckIcon className="h-5 w-5 mr-2"/>Friends</Button>
+                                            }>
+                                                <Dropdown.Item 
+                                                    onClick={profile.is_best_friend ? onRemoveBestFriend : onMakeBestFriend}
+                                                    disabled={actionLoading === 'addBestFriend' || actionLoading === 'removeBestFriend'}
+                                                >
+                                                    <HeartIcon className="h-5 w-5 mr-2" />
+                                                    {profile.is_best_friend ? 'Remove Best Friend' : 'Make Best Friend'}
+                                                </Dropdown.Item>
+                                                <Dropdown.Item 
+                                                    onClick={onRemoveFriend}
+                                                    disabled={actionLoading === 'removeFriend'}
+                                                    className="text-red-400 hover:!bg-red-500/20 hover:!text-red-300 focus:!bg-red-500/20"
+                                                >
+                                                    <UserMinusIcon className="h-5 w-5 mr-2" />
+                                                    Unfriend
+                                                </Dropdown.Item>
+                                            </Dropdown>
+                                        ) : profile.is_friend_pending_me ? (
+                                            <Button onClick={onAcceptFriend} loading={actionLoading === 'acceptFriend'} className="w-full"><CheckIcon className="h-5 w-5 mr-2" />Accept Friend Request</Button>
+                                        ) : profile.is_friend_pending_them ? (
+                                            <Button disabled className="w-full">Friend Request Sent</Button>
+                                        ) : (
+                                            <Button onClick={onAddFriend} loading={actionLoading === 'addFriend'} className="w-full"><UserPlusIcon className="h-5 w-5 mr-2" />Add Friend</Button>
+                                        )}
 
-                                    {/* Follow Actions */}
-                                    {profile.is_following ? (
-                                        <Button variant="secondary" onClick={onUnfollow} loading={actionLoading === 'unfollow'}><WifiIcon className="h-5 w-5 rotate-45" />Unfollow</Button>
-                                    ) : (
-                                        <Button variant="secondary" onClick={onFollow} loading={actionLoading === 'follow'}><RssIcon className="h-5 w-5 mr-2" />Follow</Button>
-                                    )}
+                                        {/* Follow Action */}
+                                        {profile.is_following ? (
+                                            <Button variant="secondary" onClick={onUnfollow} loading={actionLoading === 'unfollow'} className="w-full"><WifiIcon className="h-5 w-5 -rotate-45" />Unfollow</Button>
+                                        ) : (
+                                            <Button variant="secondary" onClick={onFollow} loading={actionLoading === 'follow'} className="w-full"><RssIcon className="h-5 w-5 mr-2" />Follow</Button>
+                                        )}
+                                        
+                                        {/* Other Actions Dropdown */}
+                                        <Dropdown trigger={
+                                            <Button variant="secondary" className="!p-3"><EllipsisHorizontalIcon className="h-5 w-5" /></Button>
+                                        } contentClasses="w-48">
+                                            <Dropdown.Item 
+                                                onClick={profile.is_hidden ? onUnhideUser : onHideUser}
+                                                disabled={actionLoading === 'hide' || actionLoading === 'unhide'}
+                                            >
+                                                {profile.is_hidden ? <ArrowPathIcon className="h-5 w-5 mr-2" /> : <NoSymbolIcon className="h-5 w-5 mr-2" />}
+                                                {profile.is_hidden ? 'Unhide User' : 'Hide User'}
+                                            </Dropdown.Item>
+                                        </Dropdown>
+                                    </div>
                                     
-                                    {/* Best Friend Actions */}
-                                    {profile.is_friend && (
-                                        <>
-                                            <div className="border-t border-gray-700 my-1"></div>
-                                            {profile.is_best_friend ? (
-                                                <Button variant="secondary" onClick={onRemoveBestFriend} loading={actionLoading === 'removeBestFriend'}><HeartIcon className="h-5 w-5 mr-2" />Remove Best Friend</Button>
-                                            ) : (
-                                                <Button variant="secondary" onClick={onMakeBestFriend} loading={actionLoading === 'addBestFriend'}><HeartIcon className="h-5 w-5 mr-2" />Make Best Friend</Button>
-                                            )}
-                                            {profile.is_best_friend_by && (
-                                                <div className="text-center p-2 bg-primary/70 rounded-md">
-                                                    <p className="text-sm text-light">{profile.display_name} considers you a best friend.</p>
-                                                    <button 
-                                                        onClick={onRemoveTheirBestFriendStatus}
-                                                        className="text-xs text-accent hover:underline mt-1 disabled:opacity-50"
-                                                        disabled={actionLoading === 'removeTheirBfs'}
-                                                    >
-                                                        {actionLoading === 'removeTheirBfs' ? 'Revoking...' : 'Revoke Status'}
-                                                     </button>
-                                                </div>
-                                            )}
-                                        </>
+                                    {/* Best Friend Status Notification */}
+                                    {profile.is_best_friend_by && (
+                                        <div className="text-center p-2 mt-3 bg-primary/70 rounded-md">
+                                            <p className="text-sm text-light">{profile.display_name} considers you a best friend.</p>
+                                            <button 
+                                                onClick={onRemoveTheirBestFriendStatus}
+                                                className="text-xs text-accent hover:underline mt-1 disabled:opacity-50"
+                                                disabled={actionLoading === 'removeTheirBfs'}
+                                            >
+                                                {actionLoading === 'removeTheirBfs' ? 'Revoking...' : 'Revoke Status'}
+                                             </button>
+                                        </div>
                                     )}
-                                    <div className="border-t border-gray-700 my-1"></div>
-
-
-                                    {/* Hide Actions */}
-                                    {profile.is_hidden ? (
-                                        <Button variant="secondary" onClick={onUnhideUser} loading={actionLoading === 'unhide'}><ArrowPathIcon className="h-5 w-5 mr-2" />Unhide User</Button>
-                                    ) : (
-                                        <Button variant="secondary" onClick={onHideUser} loading={actionLoading === 'hide'}><NoSymbolIcon className="h-5 w-5 mr-2" />Hide User</Button>
-                                    )}
-                                </div>
+                                </>
                            ) : (
                                 <p className="text-center text-medium p-4">Actions are disabled for banned users.</p>
                            )}

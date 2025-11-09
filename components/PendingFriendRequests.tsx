@@ -15,7 +15,7 @@ interface PendingRequest {
 }
 
 const PendingFriendRequests: React.FC = () => {
-    const { profile: currentUserProfile } = useAuth();
+    const { profile: currentUserProfile, isViewOnly } = useAuth();
     const [requests, setRequests] = useState<PendingRequest[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -46,6 +46,10 @@ const PendingFriendRequests: React.FC = () => {
     }, [currentUserProfile]);
 
     const handleAction = async (requestId: number, requesterId: string, action: 'accept' | 'reject') => {
+        if (isViewOnly) {
+            toast.error("View-only accounts cannot manage friend requests.");
+            return;
+        }
         if (!currentUserProfile) return;
         setActionLoading(prev => ({ ...prev, [requestId]: true }));
 
@@ -112,6 +116,8 @@ const PendingFriendRequests: React.FC = () => {
                                 onClick={() => handleAction(req.id, req.user_1_profile.id, 'accept')}
                                 loading={actionLoading[req.id]}
                                 className="!p-2"
+                                disabled={isViewOnly}
+                                title={isViewOnly ? "View-only accounts cannot manage friend requests." : undefined}
                             >
                                 <CheckIcon className="h-5 w-5" />
                             </Button>
@@ -120,6 +126,8 @@ const PendingFriendRequests: React.FC = () => {
                                 onClick={() => handleAction(req.id, req.user_1_profile.id, 'reject')}
                                 loading={actionLoading[req.id]}
                                 className="!p-2"
+                                disabled={isViewOnly}
+                                title={isViewOnly ? "View-only accounts cannot manage friend requests." : undefined}
                              >
                                 <XMarkIcon className="h-5 w-5" />
                             </Button>

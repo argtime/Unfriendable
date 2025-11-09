@@ -28,6 +28,8 @@ export interface UserProfile {
   bio: string | null;
   avatar_url: string | null;
   cover_image_url: string | null;
+  show_profile_views: boolean;
+  last_sign_in_at: string | null;
 }
 
 export interface FullUserProfile extends UserProfile {
@@ -67,5 +69,6 @@ export interface AuthContextType {
   profile: UserProfile | null;
   loading: boolean;
   isDev: boolean;
+  isViewOnly: boolean;
   signOut: () => Promise<void>;
 }

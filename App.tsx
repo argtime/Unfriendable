@@ -6,6 +6,7 @@ import { AuthProvider, useAuth } from './hooks/useAuth';
 import Layout from './components/layout/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
 import Spinner from './components/ui/Spinner';
+import PageSkeleton from './components/ui/PageSkeleton';
 
 const HomePage = lazy(() => import('./pages/HomePage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
@@ -34,7 +35,7 @@ const App: React.FC = () => {
     <AuthProvider>
       <HashRouter>
         <Layout>
-          <Suspense fallback={<div className="flex justify-center items-center h-screen"><Spinner /></div>}>
+          <Suspense fallback={<div className="flex justify-center items-center flex-grow w-full"><PageSkeleton /></div>}>
             <Routes>
               <Route path="/" element={<RootRedirect />} />
               <Route path="/login" element={<LoginPage />} />

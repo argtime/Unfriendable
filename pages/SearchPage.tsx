@@ -2,21 +2,24 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import { UserProfile } from '../types';
-import Spinner from '../components/ui/Spinner';
 import Card from '../components/ui/Card';
 import Avatar from '../components/ui/Avatar';
+import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
+import SearchResultSkeleton from '../components/ui/SearchResultSkeleton';
 
 const SearchPage: React.FC = () => {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const query = searchParams.get('q');
   const [results, setResults] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [localQuery, setLocalQuery] = useState(query || '');
 
   useEffect(() => {
     const performSearch = async () => {
       if (!query) {
         setResults([]);
+        setLoading(false);
         return;
       }
       setLoading(true);
@@ -39,14 +42,45 @@ const SearchPage: React.FC = () => {
 
     performSearch();
   }, [query]);
+  
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (localQuery.trim()) {
+      setSearchParams({ q: localQuery.trim() });
+    } else {
+      setSearchParams({});
+    }
+  };
+
 
   return (
-    <div>
-      <h1 className="text-3xl font-bold mb-6">
-        Search Results for <span className="text-accent">"{query}"</span>
+    <div className="max-w-4xl mx-auto">
+      <h1 className="text-3xl font-bold mb-4">
+        {query ? (
+          <>Search Results for <span className="text-accent">"{query}"</span></>
+        ) : (
+          "Search for Users"
+        )}
       </h1>
       
-      {loading && <div className="flex justify-center mt-10"><Spinner /></div>}
+      <form onSubmit={handleSearch} className="mb-8">
+        <div className="relative">
+          <input
+            type="text"
+            value={localQuery}
+            onChange={(e) => setLocalQuery(e.target.value)}
+            placeholder="Find users by username or display name..."
+            className="w-full bg-secondary border border-gray-700 rounded-full py-3 pl-12 pr-4 focus:outline-none focus:ring-2 focus:ring-accent transition-colors"
+          />
+          <MagnifyingGlassIcon className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-500" />
+        </div>
+      </form>
+      
+      {loading && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => <SearchResultSkeleton key={i} />)}
+        </div>
+      )}
       
       {error && <p className="text-center text-red-500">{error}</p>}
 
@@ -69,7 +103,7 @@ const SearchPage: React.FC = () => {
               ))}
             </div>
           ) : (
-            <p className="text-center text-medium mt-10">No users found.</p>
+             query && <p className="text-center text-medium mt-10">No users found for "{query}".</p>
           )}
         </>
       )}

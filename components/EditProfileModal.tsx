@@ -8,6 +8,7 @@ import Input from './ui/Input';
 import Avatar from './ui/Avatar';
 import AvatarSelector from './AvatarSelector';
 import CoverImageSelector from './CoverImageSelector';
+import ToggleSwitch from './ui/ToggleSwitch';
 
 interface EditProfileModalProps {
   userProfile: UserProfile;
@@ -20,6 +21,7 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({ userProfile, onClos
   const [bio, setBio] = useState(userProfile.bio || '');
   const [avatarUrl, setAvatarUrl] = useState(userProfile.avatar_url || '');
   const [coverImageUrl, setCoverImageUrl] = useState(userProfile.cover_image_url || '');
+  const [showProfileViews, setShowProfileViews] = useState(userProfile.show_profile_views || false);
   const [loading, setLoading] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
 
@@ -47,6 +49,7 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({ userProfile, onClos
         bio: bio,
         avatar_url: avatarUrl || null,
         cover_image_url: coverImageUrl || null,
+        show_profile_views: showProfileViews,
       })
       .eq('id', userProfile.id);
     
@@ -101,6 +104,16 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({ userProfile, onClos
               className="w-full px-3 py-2 bg-primary border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-accent text-light"
               maxLength={250}
             />
+          </div>
+          <div className="border-t border-gray-700/50 pt-4">
+             <ToggleSwitch
+                label="Publicize Profile Views"
+                enabled={showProfileViews}
+                setEnabled={setShowProfileViews}
+              />
+              <p className="text-xs text-medium mt-2">
+                When enabled, other users will see a "viewed your profile" event in their feed. This is disabled by default.
+              </p>
           </div>
           <div>
             <label className="block text-sm font-medium text-medium mb-1">Avatar URL</label>

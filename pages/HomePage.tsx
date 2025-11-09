@@ -4,9 +4,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../services/supabase';
 import { Happening, HappeningType } from '../types';
 import FeedItem from '../components/FeedItem';
-import Spinner from '../components/ui/Spinner';
 import { useAuth } from '../hooks/useAuth';
 import PendingFriendRequests from '../components/PendingFriendRequests';
+import FeedSkeleton from '../components/ui/FeedSkeleton';
 
 const happeningTypes: { value: HappeningType; label: string }[] = [
   { value: 'CREATED_ACCOUNT', label: 'Account Creations' },
@@ -25,20 +25,6 @@ const happeningTypes: { value: HappeningType; label: string }[] = [
 
 type RelationshipFilter = 'all' | 'friends' | 'best_friends' | 'following';
 
-const FeedSkeleton: React.FC = () => (
-    <div className="bg-secondary p-4 rounded-lg border border-gray-800 flex items-start gap-4 overflow-hidden relative">
-        <div className="w-10 h-10 rounded-full shrink-0 bg-primary/80"></div>
-        <div className="flex-grow min-w-0 space-y-2">
-            <div className="h-4 bg-primary/80 rounded w-3/4"></div>
-            <div className="h-3 bg-primary/80 rounded w-1/2"></div>
-            <div className="h-3 bg-primary/80 rounded w-1/4"></div>
-        </div>
-        <div className="w-10 h-10 rounded-full shrink-0 bg-primary/80"></div>
-        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-primary/50 to-transparent -translate-x-full animate-shimmer"></div>
-    </div>
-);
-
-
 const HomePage: React.FC = () => {
   const { profile } = useAuth();
   const [happenings, setHappenings] = useState<Happening[]>([]);
@@ -49,11 +35,14 @@ const HomePage: React.FC = () => {
   const [relationshipFilter, setRelationshipFilter] = useState<RelationshipFilter>('all');
   const [refreshRequests, setRefreshRequests] = useState(0);
 
-  const fetchFeed = useCallback(async () => {
+  const fetchFeed = useCallback(async (isBackgroundRefresh = false) => {
     if (!profile) return;
-    setLoading(true);
-    setError(null);
-
+    
+    if (!isBackgroundRefresh) {
+      setLoading(true);
+    }
+    // Always clear error on fetch
+    setError(null); 
     try {
       let query = supabase
         .from('happenings')
@@ -128,18 +117,20 @@ const HomePage: React.FC = () => {
       console.error(err);
       setHappenings([]);
     } finally {
-      setLoading(false);
+      if (!isBackgroundRefresh) {
+        setLoading(false);
+      }
     }
   }, [profile, feedType, filterType, relationshipFilter]);
 
-  const onAction = () => {
-    fetchFeed();
+  const onAction = useCallback(() => {
+    fetchFeed(true);
     setRefreshRequests(prev => prev + 1);
-  };
+  }, [fetchFeed]);
 
   useEffect(() => {
     if (profile) {
-      fetchFeed();
+      fetchFeed(false); // Initial load or filter-driven load
     }
   }, [fetchFeed, profile]);
 
@@ -158,7 +149,7 @@ const HomePage: React.FC = () => {
       supabase.removeChannel(channel);
       supabase.removeChannel(friendshipsChannel);
     };
-  }, [fetchFeed]);
+  }, [onAction]);
 
   const TabButton: React.FC<{type: 'personal' | 'global', label: string}> = ({ type, label }) => (
     <button

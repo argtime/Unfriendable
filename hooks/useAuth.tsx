@@ -11,6 +11,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [isDev, setIsDev] = useState(false);
+  const [isViewOnly, setIsViewOnly] = useState(false);
 
   useEffect(() => {
     // onAuthStateChange fires an INITIAL_SESSION event on load, which handles
@@ -20,7 +21,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setUser(currentUser);
 
       if (currentUser) {
-        setLoading(true);
+        setIsViewOnly(currentUser.email === 'everettsfacts@gmail.com');
         try {
           const { data: profileData, error } = await supabase.from('users').select('*').eq('id', currentUser.id).single();
 
@@ -50,6 +51,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // User is null (logged out)
         setProfile(null);
         setIsDev(false);
+        setIsViewOnly(false);
         setLoading(false); // We are done loading.
       }
     });
@@ -70,6 +72,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     profile,
     loading,
     isDev,
+    isViewOnly,
     signOut
   };
 

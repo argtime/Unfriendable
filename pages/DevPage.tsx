@@ -3,7 +3,6 @@ import { useAuth } from '../hooks/useAuth';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import { UserProfile, Happening, Friendship, HappeningType } from '../types';
-import Spinner from '../components/ui/Spinner';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import { XMarkIcon, TrashIcon, PencilIcon, PlusIcon, NoSymbolIcon, PowerIcon } from '@heroicons/react/24/outline';
@@ -11,6 +10,8 @@ import toast from 'react-hot-toast';
 import Avatar from '../components/ui/Avatar';
 import Input from '../components/ui/Input';
 import PlatformStats from '../components/PlatformStats';
+import Spinner from '../components/ui/Spinner';
+import TableSkeleton from '../components/ui/TableSkeleton';
 
 // Types
 type FriendshipWithProfiles = Friendship & { user_1_profile: UserProfile; user_2_profile: UserProfile; };
@@ -40,7 +41,7 @@ const ManageUserModal: React.FC<{ user: UserProfile, onClose: () => void, onData
   const [details, setDetails] = useState<UserDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState('friends');
+  const [activeTab, setActiveTab] = useState('details');
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -88,30 +89,22 @@ const ManageUserModal: React.FC<{ user: UserProfile, onClose: () => void, onData
     }
   };
   
-  const handleSignOutUser = () => {
-    if (!window.confirm(`Are you sure you want to forcibly sign out ${user.display_name}? This will invalidate all their current sessions.`)) {
-        return;
-    }
-    handleAdminAction(
-        async () => {
-            const { data, error } = await supabase.rpc('sign_out_user', { target_user_id: user.id });
-            if (error) return { error };
-            if (data?.error) return { error: { message: data.error }};
-            return { error: null };
-        },
-        'User has been signed out successfully.'
-    );
-  };
-
   const deleteFriendship = (id: number) => handleAdminAction(() => supabase.from('friendships').delete().eq('id', id), 'Friendship removed.');
   const deleteFollow = (id: number) => handleAdminAction(() => supabase.from('follows').delete().eq('id', id), 'Follow removed.');
   const deleteHappening = (id: number) => handleAdminAction(() => supabase.from('happenings').delete().eq('id', id), 'Happening deleted.');
   
 
-  const TabButton: React.FC<{ tab: string, label: string, count: number }> = ({ tab, label, count }) => (
-    <button onClick={() => setActiveTab(tab)} className={`px-3 py-2 text-sm font-medium rounded-md ${activeTab === tab ? 'bg-accent text-primary' : 'text-medium hover:bg-gray-700'}`}>
-        {label} <span className="text-xs bg-primary text-light rounded-full px-2 py-0.5">{count}</span>
+  const TabButton: React.FC<{ tab: string, label: string, count?: number }> = ({ tab, label, count }) => (
+    <button onClick={() => setActiveTab(tab)} className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === tab ? 'bg-accent text-light' : 'text-medium hover:bg-gray-700'}`}>
+        {label} {typeof count !== 'undefined' && <span className="text-xs bg-primary text-light rounded-full px-2 py-0.5 ml-1">{count}</span>}
     </button>
+  );
+
+  const InfoRow: React.FC<{ label: string; value: React.ReactNode; isMono?: boolean }> = ({ label, value, isMono = false }) => (
+    <div className="grid grid-cols-3 gap-4 items-start border-b border-gray-700/50 py-3 text-sm">
+        <p className="text-medium col-span-1">{label}</p>
+        <div className={`text-light col-span-2 text-left break-words ${isMono ? 'font-mono' : ''}`}>{value}</div>
+    </div>
   );
 
   return (
@@ -129,31 +122,9 @@ const ManageUserModal: React.FC<{ user: UserProfile, onClose: () => void, onData
             <button onClick={onClose} className="text-gray-400 hover:text-white"><XMarkIcon className="h-6 w-6" /></button>
         </header>
 
-        {user.is_banned && (
-            <div className="p-4 border-b border-gray-700 bg-red-900/30">
-                <h3 className="text-lg font-semibold text-red-300 mb-2">Ban Status</h3>
-                <p className="text-sm text-medium">Reason: <span className="text-light">{user.ban_reason || 'No reason provided.'}</span></p>
-                {user.banned_at && <p className="text-xs text-medium mt-1">Banned on: {new Date(user.banned_at).toLocaleString()}</p>}
-            </div>
-        )}
-        
-        <div className="p-4 border-b border-gray-700">
-            <h3 className="text-lg font-semibold text-light mb-3">Admin Actions</h3>
-            <div className="flex gap-2">
-                <Button 
-                    variant="danger" 
-                    onClick={handleSignOutUser}
-                    loading={actionLoading}
-                    disabled={actionLoading}
-                >
-                    <PowerIcon className="h-4 w-4 mr-2" />
-                    Force Sign Out
-                </Button>
-            </div>
-        </div>
-
         <div className="p-4 border-b border-gray-700 flex flex-wrap gap-2">
             {details && <>
+                <TabButton tab="details" label="Details" />
                 <TabButton tab="friends" label="Friends" count={details.friendships.length} />
                 <TabButton tab="followers" label="Followers" count={details.followers.length} />
                 <TabButton tab="following" label="Following" count={details.following.length} />
@@ -164,15 +135,35 @@ const ManageUserModal: React.FC<{ user: UserProfile, onClose: () => void, onData
         <main className="overflow-y-auto flex-grow p-4">
           {loading ? <div className="flex justify-center py-10"><Spinner /></div> : 
             !details ? <p>No details found.</p> :
-            <div className="space-y-2">
-                {activeTab === 'friends' && details.friendships.map(f => {
-                    const friend = f.user_id_1 === user.id ? f.user_2_profile : f.user_1_profile;
-                    return <ListItem key={f.id} user={friend} onDelete={() => deleteFriendship(f.id)} />;
-                })}
-                {activeTab === 'followers' && details.followers.map(f => <ListItem key={f.id} user={f.follower} onDelete={() => deleteFollow(f.id)} />)}
-                {activeTab === 'following' && details.following.map(f => <ListItem key={f.id} user={f.following} onDelete={() => deleteFollow(f.id)} />)}
-                {activeTab === 'activity' && details.happenings.map(h => <ActivityItem key={h.id} happening={h} onDelete={() => deleteHappening(h.id)} />)}
-            </div>
+            <>
+              {activeTab === 'details' && (
+                  <div>
+                      <InfoRow label="User ID" value={user.id} isMono />
+                      <InfoRow label="Display Name" value={user.display_name} />
+                      <InfoRow label="Username" value={`@${user.username}`} />
+                      <InfoRow label="Created At" value={new Date(user.created_at).toLocaleString()} />
+                      <InfoRow label="Last Signed In" value={user.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleString() : 'N/A'} />
+                      <InfoRow label="Bio" value={user.bio || 'Not set'} />
+                      <InfoRow label="Publicize Profile Views" value={user.show_profile_views ? 'Enabled' : 'Disabled'} />
+                      <InfoRow label="Banned" value={user.is_banned ? <span className="font-bold text-red-400">Yes</span> : 'No'} />
+                      {user.is_banned && (
+                          <>
+                              <InfoRow label="Ban Reason" value={user.ban_reason || 'No reason provided.'} />
+                              <InfoRow label="Banned At" value={user.banned_at ? new Date(user.banned_at).toLocaleString() : 'N/A'} />
+                          </>
+                      )}
+                  </div>
+              )}
+              <div className="space-y-2">
+                  {activeTab === 'friends' && details.friendships.map(f => {
+                      const friend = f.user_id_1 === user.id ? f.user_2_profile : f.user_1_profile;
+                      return <ListItem key={f.id} user={friend} onDelete={() => deleteFriendship(f.id)} />;
+                  })}
+                  {activeTab === 'followers' && details.followers.map(f => <ListItem key={f.id} user={f.follower} onDelete={() => deleteFollow(f.id)} />)}
+                  {activeTab === 'following' && details.following.map(f => <ListItem key={f.id} user={f.following} onDelete={() => deleteFollow(f.id)} />)}
+                  {activeTab === 'activity' && details.happenings.map(h => <ActivityItem key={h.id} happening={h} onDelete={() => deleteHappening(h.id)} />)}
+              </div>
+            </>
           }
         </main>
       </div>
@@ -273,7 +264,7 @@ const ListItem: React.FC<{ user: UserProfile, onDelete: () => void }> = React.me
                 <p className="text-xs text-medium">@{user.username}</p>
             </div>
         </Link>
-        <Button variant="secondary" className="!p-2" onClick={onDelete}><TrashIcon className="h-4 w-4 text-red-500" /></Button>
+        <Button variant="danger" className="px-3 py-1 text-sm" onClick={onDelete}>Remove</Button>
     </div>
 ));
 
@@ -338,7 +329,7 @@ const DevPage: React.FC = () => {
         }
     };
 
-    if (authLoading || loading) return <div className="flex justify-center mt-10"><Spinner /></div>;
+    if (authLoading || loading) return <div className="mt-10"><TableSkeleton rows={10} cols={5} /></div>;
     if (!isDev) return null;
 
     const TabButton: React.FC<{ tab: 'users' | 'feed', label: string, count: number }> = ({ tab, label, count }) => (

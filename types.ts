@@ -25,6 +25,9 @@ export interface UserProfile {
   is_banned: boolean;
   banned_at: string | null;
   ban_reason: string | null;
+  bio: string | null;
+  avatar_url: string | null;
+  cover_image_url: string | null;
 }
 
 export interface FullUserProfile extends UserProfile {

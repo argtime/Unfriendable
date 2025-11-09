@@ -11,9 +11,9 @@ const Button: React.FC<ButtonProps> = ({ variant = 'primary', loading = false, c
   const baseClasses = "px-4 py-2 rounded-md font-semibold transition-all duration-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed active:scale-95";
   
   const variantClasses = {
-    primary: 'bg-accent text-primary hover:bg-opacity-90',
-    secondary: 'bg-secondary text-light hover:bg-gray-700 border border-gray-600',
-    danger: 'bg-red-600 text-light hover:bg-red-700',
+    primary: 'bg-accent text-light hover:bg-accent-hover',
+    secondary: 'bg-secondary/60 text-light hover:bg-secondary border border-gray-700 hover:border-gray-600',
+    danger: 'bg-red-600/90 text-light hover:bg-red-600',
   };
 
   return (

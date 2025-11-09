@@ -10,9 +10,10 @@ import toast from 'react-hot-toast';
 import Avatar from '../components/ui/Avatar';
 import Card from '../components/ui/Card';
 import UserListModal from '../components/UserListModal';
+import EditProfileModal from '../components/EditProfileModal';
 import {
     UserPlusIcon, UserMinusIcon, CheckIcon, RssIcon, WifiIcon, HeartIcon,
-    NoSymbolIcon, ArrowPathIcon
+    NoSymbolIcon, ArrowPathIcon, PencilIcon
 } from '@heroicons/react/24/outline';
 
 const ProfilePage: React.FC = () => {
@@ -22,12 +23,15 @@ const ProfilePage: React.FC = () => {
     
     const [profile, setProfile] = useState<FullUserProfile | null>(null);
     const [happenings, setHappenings] = useState<Happening[]>([]);
-    const [stats, setStats] = useState({ friends: 0, followers: 0, following: 0 });
+    const [stats, setStats] = useState({ friends: 0, followers: 0, following: 0, hidden: 0 });
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
     const [modalContent, setModalContent] = useState<{ title: string; fetchUsers: () => Promise<UserProfile[]> } | null>(null);
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [coverImageError, setCoverImageError] = useState(false);
 
     const fetchProfileData = useCallback(async () => {
+        setCoverImageError(false);
         if (!username || !currentUserProfile) return;
         
         const { data: userData, error: userError } = await supabase.from('users').select('*').eq('username', username).single();
@@ -39,7 +43,7 @@ const ProfilePage: React.FC = () => {
 
         const [
             friendship, following, followed, bestFriend, bestFriendBy, hidden,
-            profileHappenings, friendsCount1, friendsCount2, followersCount, followingCount
+            profileHappenings, friendsCount1, friendsCount2, followersCount, followingCount, hiddenCount
         ] = await Promise.all([
             supabase.from('friendships').select('*').or(`and(user_id_1.eq.${currentUserProfile.id},user_id_2.eq.${userData.id}),and(user_id_1.eq.${userData.id},user_id_2.eq.${currentUserProfile.id})`).maybeSingle(),
             supabase.from('follows').select('id', { head: true, count: 'exact' }).eq('follower_id', currentUserProfile.id).eq('following_id', userData.id).maybeSingle(),
@@ -52,12 +56,14 @@ const ProfilePage: React.FC = () => {
             supabase.from('friendships').select('*', { count: 'exact', head: true }).eq('user_id_2', userData.id).eq('status', 'accepted'),
             supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', userData.id),
             supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', userData.id),
+            supabase.from('hidden_users').select('*', { count: 'exact', head: true }).eq('user_id', userData.id),
         ]);
 
         setStats({
             friends: (friendsCount1.count || 0) + (friendsCount2.count || 0),
             followers: followersCount.count || 0,
             following: followingCount.count || 0,
+            hidden: hiddenCount.count || 0,
         });
 
         const fullProfile: FullUserProfile = {
@@ -141,10 +147,32 @@ const ProfilePage: React.FC = () => {
         supabase.from('happenings').insert({ actor_id: currentUserProfile!.id, action_type: 'REJECTED_BEST_FRIEND_STATUS', target_id: profile!.id })
     ]), `Rejected best friend status from ${profile?.display_name}.`);
 
-    const onHideUser = () => handleAction('hide', () => Promise.all([
-        supabase.from('hidden_users').insert({ user_id: currentUserProfile!.id, hidden_user_id: profile!.id }),
-        supabase.from('happenings').insert({ actor_id: currentUserProfile!.id, action_type: 'HID_USER', target_id: profile!.id })
-    ]), `Hid ${profile?.display_name}.`);
+    const onHideUser = async () => {
+        setActionLoading('hide');
+        try {
+            const { count, error: countError } = await supabase
+                .from('hidden_users')
+                .select('*', { count: 'exact', head: true })
+                .eq('user_id', currentUserProfile!.id);
+
+            if (countError) throw countError;
+
+            if (count !== null && count >= 10) {
+                toast.error("You can only hide up to 10 users.");
+                setActionLoading(null);
+                return;
+            }
+
+            await handleAction('hide', () => Promise.all([
+                supabase.from('hidden_users').insert({ user_id: currentUserProfile!.id, hidden_user_id: profile!.id }),
+                supabase.from('happenings').insert({ actor_id: currentUserProfile!.id, action_type: 'HID_USER', target_id: profile!.id })
+            ]), `Hid ${profile?.display_name}.`);
+        } catch (error: any) {
+            toast.error(error.message || 'An error occurred.');
+            setActionLoading(null);
+        }
+    };
+
 
     const onUnhideUser = () => handleAction('unhide', () => Promise.all([
         supabase.from('hidden_users').delete().eq('user_id', currentUserProfile!.id).eq('hidden_user_id', profile!.id),
@@ -158,21 +186,23 @@ const ProfilePage: React.FC = () => {
     const fetchFriends = async (): Promise<UserProfile[]> => {
         const { data: friends1 } = await supabase.from('friendships').select('user_2_profile:user_id_2(*)').eq('user_id_1', profile!.id).eq('status', 'accepted');
         const { data: friends2 } = await supabase.from('friendships').select('user_1_profile:user_id_1(*)').eq('user_id_2', profile!.id).eq('status', 'accepted');
-        const friends = [...(friends1?.map(f => f.user_2_profile) || []), ...(friends2?.map(f => f.user_1_profile) || [])];
-        // Fix: Use a type guard to correctly filter out null/undefined values and satisfy TypeScript's type checker.
+        const friends = [
+            ...((friends1 as any[])?.flatMap(f => f.user_2_profile) || []),
+            ...((friends2 as any[])?.flatMap(f => f.user_1_profile) || [])
+        ];
         return friends.filter((p): p is UserProfile => !!p);
     };
     
     const fetchFollowers = async (): Promise<UserProfile[]> => {
         const { data } = await supabase.from('follows').select('follower:follower_id(*)').eq('following_id', profile!.id);
-        // Fix: Use a type guard to correctly filter out null/undefined values and satisfy TypeScript's type checker.
-        return (data?.map(f => f.follower).filter((p): p is UserProfile => !!p)) || [];
+        const followers = (data as any[])?.flatMap(f => f.follower) || [];
+        return followers.filter((p): p is UserProfile => !!p);
     };
 
     const fetchFollowing = async (): Promise<UserProfile[]> => {
         const { data } = await supabase.from('follows').select('following:following_id(*)').eq('follower_id', profile!.id);
-        // Fix: Use a type guard to correctly filter out null/undefined values and satisfy TypeScript's type checker.
-        return (data?.map(f => f.following).filter((p): p is UserProfile => !!p)) || [];
+        const following = (data as any[])?.flatMap(f => f.following) || [];
+        return following.filter((p): p is UserProfile => !!p);
     };
 
     if (loading || !profile) {
@@ -197,6 +227,13 @@ const ProfilePage: React.FC = () => {
                     onClose={() => setModalContent(null)}
                 />
             )}
+            {isEditModalOpen && (
+                <EditProfileModal 
+                    userProfile={profile}
+                    onClose={() => setIsEditModalOpen(false)}
+                    onProfileUpdate={fetchProfileData}
+                />
+            )}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {profile.is_banned && (
                     <div className="lg:col-span-3">
@@ -212,23 +249,43 @@ const ProfilePage: React.FC = () => {
                     </div>
                 )}
                 <div className="lg:col-span-1 space-y-6">
-                    <div className="relative">
-                        <div className="h-24 md:h-32 rounded-t-lg bg-gradient-to-br from-accent/20 to-primary"></div>
-                        <div className="p-6 pt-0">
-                            <Avatar displayName={profile.display_name} size="xl" className="mx-auto -mt-12 mb-4 border-4 border-secondary" />
-                            <div className="text-center">
-                                <h1 className="text-3xl font-bold">{profile.display_name}</h1>
-                                <p className="text-medium text-lg">@{profile.username}</p>
-                                {profile.is_followed_by && <p className="mt-2 text-xs bg-gray-700 text-light px-2 py-1 rounded-full inline-block">Follows you</p>}
+                     <Card className="!p-0 overflow-hidden">
+                        <div className="relative mb-16">
+                            {profile.cover_image_url && !coverImageError ? (
+                                <img 
+                                    src={profile.cover_image_url} 
+                                    alt="Cover" 
+                                    className="h-32 w-full object-cover" 
+                                    onError={() => setCoverImageError(true)}
+                                />
+                            ) : (
+                                <div className="h-32 w-full bg-gradient-to-br from-accent/20 to-primary"></div>
+                            )}
+                            <div className="absolute inset-0 bg-gradient-to-t from-secondary via-secondary/60 to-transparent"></div>
+                             <div className="absolute -bottom-12 left-6">
+                                <Avatar displayName={profile.display_name} imageUrl={profile.avatar_url} size="xl" className="border-4 border-secondary" />
                             </div>
                         </div>
-                    </div>
+                        <div className="px-6 pb-6">
+                            <h1 className="text-3xl font-bold">{profile.display_name}</h1>
+                            <p className="text-medium text-lg">@{profile.username}</p>
+                            {profile.is_followed_by && <p className="mt-2 text-xs bg-gray-700 text-light px-2 py-1 rounded-full inline-block">Follows you</p>}
+                            {isSelf && <Button variant="secondary" className="mt-4 w-full" onClick={() => setIsEditModalOpen(true)}><PencilIcon className="h-4 w-4 mr-2" />Edit Profile</Button>}
+                        </div>
+                    </Card>
+                     
+                    {profile.bio && (
+                        <Card>
+                            <p className="text-light italic text-center">"{profile.bio}"</p>
+                        </Card>
+                    )}
 
                     <Card>
-                        <div className="grid grid-cols-3 gap-4">
+                        <div className="grid grid-cols-4 gap-4">
                             <StatItem label="Friends" value={stats.friends} onClick={() => showUserList('Friends', fetchFriends)} />
                             <StatItem label="Followers" value={stats.followers} onClick={() => showUserList('Followers', fetchFollowers)} />
                             <StatItem label="Following" value={stats.following} onClick={() => showUserList('Following', fetchFollowing)} />
+                             <StatItem label="Hidden" value={stats.hidden} />
                         </div>
                     </Card>
 
@@ -249,7 +306,7 @@ const ProfilePage: React.FC = () => {
 
                                     {/* Follow Actions */}
                                     {profile.is_following ? (
-                                        <Button variant="secondary" onClick={onUnfollow} loading={actionLoading === 'unfollow'}><WifiIcon className="h-5 w-5 mr-2 rotate-45" />Unfollow</Button>
+                                        <Button variant="secondary" onClick={onUnfollow} loading={actionLoading === 'unfollow'}><WifiIcon className="h-5 w-5 rotate-45" />Unfollow</Button>
                                     ) : (
                                         <Button variant="secondary" onClick={onFollow} loading={actionLoading === 'follow'}><RssIcon className="h-5 w-5 mr-2" />Follow</Button>
                                     )}

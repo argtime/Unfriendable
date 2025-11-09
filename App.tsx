@@ -13,6 +13,8 @@ const SignupPage = lazy(() => import('./pages/SignupPage'));
 const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 const DevPage = lazy(() => import('./pages/DevPage'));
 const SearchPage = lazy(() => import('./pages/SearchPage'));
+const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'));
+const UpdatePasswordPage = lazy(() => import('./pages/UpdatePasswordPage'));
 
 const App: React.FC = () => {
   return (
@@ -23,6 +25,8 @@ const App: React.FC = () => {
             <Routes>
               <Route path="/login" element={<LoginPage />} />
               <Route path="/signup" element={<SignupPage />} />
+              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+              <Route path="/update-password" element={<UpdatePasswordPage />} />
               <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
               <Route path="/profile/:username" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
               <Route path="/dev" element={<ProtectedRoute><DevPage /></ProtectedRoute>} />
@@ -34,7 +38,7 @@ const App: React.FC = () => {
           style: {
             background: '#1A1A1A',
             color: '#F5F5F5',
-            border: '1px solid #FF0055'
+            border: '1px solid #3b82f6'
           }
         }} />
       </HashRouter>

@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 interface AvatarProps {
   displayName: string;
+  imageUrl?: string | null;
   size?: 'sm' | 'md' | 'lg' | 'xl';
   className?: string;
 }
@@ -21,7 +22,13 @@ const getInitials = (name: string) => {
   return name.substring(0, 2).toUpperCase();
 };
 
-const Avatar: React.FC<AvatarProps> = ({ displayName, size = 'md', className = '' }) => {
+const Avatar: React.FC<AvatarProps> = ({ displayName, imageUrl, size = 'md', className = '' }) => {
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    setError(false); // Reset error when image URL changes
+  }, [imageUrl]);
+
   const initials = getInitials(displayName);
 
   // Simple hash function to get a consistent color
@@ -34,15 +41,24 @@ const Avatar: React.FC<AvatarProps> = ({ displayName, size = 'md', className = '
     lg: 'h-16 w-16 text-xl',
     xl: 'h-24 w-24 text-3xl',
   };
+  
+  const baseClasses = `rounded-full flex items-center justify-center font-bold text-white select-none shrink-0 ${sizeClasses[size]} ${className}`;
+
+  if (imageUrl && !error) {
+    return (
+        <img 
+            src={imageUrl} 
+            alt={displayName} 
+            className={`${baseClasses} object-cover`}
+            title={displayName}
+            onError={() => setError(true)}
+        />
+    );
+  }
 
   return (
     <div
-      className={`
-        ${sizeClasses[size]}
-        ${color}
-        ${className}
-        rounded-full flex items-center justify-center font-bold text-white select-none shrink-0
-      `}
+      className={`${baseClasses} ${color}`}
       title={displayName}
     >
       <span>{initials}</span>

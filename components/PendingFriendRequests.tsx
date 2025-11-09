@@ -87,7 +87,7 @@ const PendingFriendRequests: React.FC = () => {
                 {requests.map(req => (
                     <div key={req.id} className="flex items-center justify-between gap-2">
                         <Link to={`/profile/${req.user_1_profile.username}`} className="flex items-center gap-3 min-w-0">
-                            <Avatar displayName={req.user_1_profile.display_name} size="md" />
+                            <Avatar displayName={req.user_1_profile.display_name} imageUrl={req.user_1_profile.avatar_url} size="md" />
                             <div className="truncate">
                                 <p className="font-semibold truncate">{req.user_1_profile.display_name}</p>
                                 <p className="text-sm text-medium truncate">@{req.user_1_profile.username}</p>

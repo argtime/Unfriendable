@@ -58,7 +58,7 @@ const SearchPage: React.FC = () => {
                 <Link to={`/profile/${user.username}`} key={user.id}>
                   <Card className="hover:border-accent transition-all duration-200 ease-in-out hover:scale-[1.02]">
                     <div className="flex items-center gap-4">
-                      <Avatar displayName={user.display_name} size="md" />
+                      <Avatar displayName={user.display_name} imageUrl={user.avatar_url} size="md" />
                       <div>
                         <h2 className="text-xl font-bold">{user.display_name}</h2>
                         <p className="text-medium">@{user.username}</p>

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../services/supabase';
 import { Happening, HappeningType } from '../types';
@@ -21,6 +22,8 @@ const happeningTypes: { value: HappeningType; label: string }[] = [
   { value: 'VIEWED_PROFILE', label: 'Profile Views' },
 ];
 
+type RelationshipFilter = 'all' | 'friends' | 'best_friends' | 'following';
+
 const FeedSkeleton: React.FC = () => (
     <div className="bg-secondary p-4 rounded-lg border border-gray-800 flex items-start gap-4 overflow-hidden relative">
         <div className="w-10 h-10 rounded-full shrink-0 bg-primary/80"></div>
@@ -42,6 +45,7 @@ const HomePage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [feedType, setFeedType] = useState<'personal' | 'global'>('personal');
   const [filterType, setFilterType] = useState<HappeningType | 'all'>('all');
+  const [relationshipFilter, setRelationshipFilter] = useState<RelationshipFilter>('all');
   const [refreshRequests, setRefreshRequests] = useState(0);
 
   const fetchFeed = useCallback(async () => {
@@ -72,9 +76,10 @@ const HomePage: React.FC = () => {
       const { data: friends1, error: f1Error } = await supabase.from('friendships').select('user_id_2').eq('user_id_1', profile.id).eq('status', 'accepted');
       const { data: friends2, error: f2Error } = await supabase.from('friendships').select('user_id_1').eq('user_id_2', profile.id).eq('status', 'accepted');
       const { data: following, error: followError } = await supabase.from('follows').select('following_id').eq('follower_id', profile.id);
+      const { data: bestFriends, error: bfError } = await supabase.from('best_friends').select('best_friend_id').eq('user_id', profile.id);
       const { data: hidden, error: hiddenError } = await supabase.from('hidden_users').select('hidden_user_id').eq('user_id', profile.id);
       
-      if (f1Error || f2Error || followError || hiddenError) {
+      if (f1Error || f2Error || followError || hiddenError || bfError) {
           setError('Failed to fetch user relationships.');
           setLoading(false);
           return;
@@ -82,15 +87,34 @@ const HomePage: React.FC = () => {
 
       const friendIds = [...(friends1 || []).map(f => f.user_id_2), ...(friends2 || []).map(f => f.user_id_1)];
       const followingIds = (following || []).map(f => f.following_id);
+      const bestFriendIds = (bestFriends || []).map(f => f.best_friend_id);
       const hiddenIds = (hidden || []).map(h => h.hidden_user_id);
 
-      const relevantUserIds = [...new Set([...friendIds, ...followingIds, profile.id])];
+      let relevantUserIds: string[] = [];
+
+      switch(relationshipFilter) {
+          case 'friends':
+              relevantUserIds = friendIds;
+              break;
+          case 'best_friends':
+              relevantUserIds = bestFriendIds;
+              break;
+          case 'following':
+              relevantUserIds = followingIds;
+              break;
+          case 'all':
+          default:
+              relevantUserIds = [...new Set([...friendIds, ...followingIds, profile.id])];
+              break;
+      }
+
       const userIdsToFetch = relevantUserIds.filter(id => !hiddenIds.includes(id));
       
       const filterString = `actor_id.in.(${userIdsToFetch.join(',')}),target_id.eq.${profile.id}`;
       if (userIdsToFetch.length > 0) {
         query = query.or(filterString);
       } else {
+        // If the filtered list is empty (e.g., no best friends), we still want to fetch happenings where the user is the target
         query = query.eq('target_id', profile.id);
       }
     }
@@ -106,7 +130,7 @@ const HomePage: React.FC = () => {
       setHappenings(data || []);
     }
     setLoading(false);
-  }, [profile, feedType, filterType]);
+  }, [profile, feedType, filterType, relationshipFilter]);
 
   const onAction = () => {
     fetchFeed();
@@ -156,17 +180,33 @@ const HomePage: React.FC = () => {
       <div>
         <div className="flex justify-between items-center mb-6 flex-wrap gap-4">
           <h1 className="text-3xl font-bold text-accent">Feed</h1>
-          <div className="w-full sm:w-auto sm:max-w-xs">
-            <select
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value as HappeningType | 'all')}
-              className="w-full bg-secondary border border-gray-600 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
-            >
-              <option value="all">Filter by Action...</option>
-              {happeningTypes.map(({ value, label }) => (
-                <option key={value} value={value}>{label}</option>
-              ))}
-            </select>
+          <div className="flex gap-2 w-full sm:w-auto">
+            {feedType === 'personal' && (
+              <div className="flex-1 sm:flex-initial">
+                <select
+                  value={relationshipFilter}
+                  onChange={(e) => setRelationshipFilter(e.target.value as RelationshipFilter)}
+                  className="w-full h-full bg-secondary border border-gray-600 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
+                >
+                  <option value="all">All Connections</option>
+                  <option value="friends">Friends</option>
+                  <option value="best_friends">Best Friends</option>
+                  <option value="following">Following</option>
+                </select>
+              </div>
+            )}
+            <div className="flex-1 sm:flex-initial">
+              <select
+                value={filterType}
+                onChange={(e) => setFilterType(e.target.value as HappeningType | 'all')}
+                className="w-full h-full bg-secondary border border-gray-600 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
+              >
+                <option value="all">Filter by Action...</option>
+                {happeningTypes.map(({ value, label }) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
         
@@ -191,7 +231,7 @@ const HomePage: React.FC = () => {
               ) : (
                 <p className="text-center text-medium pt-10">
                   {feedType === 'personal' 
-                    ? "Your feed is empty. Find some users to befriend or follow!"
+                    ? "Your feed is empty. Try changing your filters or find some users to befriend or follow!"
                     : "The global feed is quiet right now."
                   }
                 </p>

@@ -6,17 +6,17 @@ import { UserProfile, Happening, Friendship, HappeningType } from '../types';
 import Spinner from '../components/ui/Spinner';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
-import { XMarkIcon, TrashIcon, PencilIcon, PlusIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, TrashIcon, PencilIcon, PlusIcon, NoSymbolIcon, PowerIcon } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 import Avatar from '../components/ui/Avatar';
 import Input from '../components/ui/Input';
+import PlatformStats from '../components/PlatformStats';
 
 // Types
 type FriendshipWithProfiles = Friendship & { user_1_profile: UserProfile; user_2_profile: UserProfile; };
 interface Follow { id: number; follower: UserProfile; following: UserProfile; }
 interface UserDetails { friendships: FriendshipWithProfiles[]; followers: Follow[]; following: Follow[]; happenings: Happening[]; }
 
-// Fix: Corrected the keys to match the HappeningType definition.
 const happeningTypesArray = Object.keys({
   CREATED_ACCOUNT: '',
   SENT_FRIEND_REQUEST: '',
@@ -39,8 +39,8 @@ const ManageUserModal: React.FC<{ user: UserProfile, onClose: () => void, onData
   const [user, setUser] = useState(initialUser);
   const [details, setDetails] = useState<UserDetails | null>(null);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('friends');
-  const [banReason, setBanReason] = useState(user.ban_reason || '');
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -53,7 +53,6 @@ const ManageUserModal: React.FC<{ user: UserProfile, onClose: () => void, onData
     ]);
     
     if (userRes.data) setUser(userRes.data);
-    setBanReason(userRes.data?.ban_reason || '');
     
     setDetails({
       friendships: (friendships.data as any) || [],
@@ -66,58 +65,44 @@ const ManageUserModal: React.FC<{ user: UserProfile, onClose: () => void, onData
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Fix: Changed the 'action' parameter type from `() => Promise<any>` to `() => PromiseLike<{ error: any }>`
-  // to correctly type the 'thenable' Supabase query builder object, which is not a full Promise.
-  const handleDelete = async (action: () => PromiseLike<{ error: any }>, successMessage: string) => {
+  const handleAdminAction = async (
+    action: () => PromiseLike<{ error: any }>,
+    successMessage: string
+  ) => {
+    setActionLoading(true);
     try {
       const { error } = await action();
       if (error) throw error;
       toast.success(successMessage);
-      fetchData();
+      await fetchData();
       onDataChange();
     } catch (error: any) {
       toast.error(`Failed: ${error.message}`);
+    } finally {
+      setActionLoading(false);
     }
   };
-
-  const deleteFriendship = (id: number) => handleDelete(() => supabase.from('friendships').delete().eq('id', id), 'Friendship removed.');
-  const deleteFollow = (id: number) => handleDelete(() => supabase.from('follows').delete().eq('id', id), 'Follow removed.');
-  const deleteHappening = (id: number) => handleDelete(() => supabase.from('happenings').delete().eq('id', id), 'Happening deleted.');
   
-  const handleBanUser = async () => {
-      if (!window.confirm(`Are you sure you want to ban ${user.display_name}?`)) return;
-      handleDelete(
-          () => supabase.from('users').update({ is_banned: true, banned_at: new Date().toISOString(), ban_reason: banReason }).eq('id', user.id),
-          'User banned.'
-      );
-  };
-  
-  const handleUnbanUser = async () => {
-      handleDelete(
-          () => supabase.from('users').update({ is_banned: false, banned_at: null, ban_reason: null }).eq('id', user.id),
-          'User unbanned.'
-      );
-  };
-
-  const handleDeleteUser = async () => {
-    if (!window.confirm(`Are you sure you want to PERMANENTLY DELETE ${user.display_name} (@${user.username})?`)) return;
-    if (prompt(`This action is irreversible. To confirm, type the username "${user.username}"`) !== user.username) {
-        toast.error("Username mismatch. Deletion cancelled.");
+  const handleSignOutUser = () => {
+    if (!window.confirm(`Are you sure you want to forcibly sign out ${user.display_name}? This will invalidate all their current sessions.`)) {
         return;
     }
-    
-    toast.loading('Deleting user and all associated data...');
-    const { error: userDeleteError } = await supabase.rpc('delete_user_by_id', { user_id_to_delete: user.id });
-    toast.dismiss();
-    if (userDeleteError) {
-      toast.error(`Failed to delete user: ${userDeleteError.message}`);
-    } else {
-      toast.success('User permanently deleted.');
-      onDataChange();
-      onClose();
-    }
+    handleAdminAction(
+        async () => {
+            const { data, error } = await supabase.rpc('sign_out_user', { target_user_id: user.id });
+            if (error) return { error };
+            if (data?.error) return { error: { message: data.error }};
+            return { error: null };
+        },
+        'User has been signed out successfully.'
+    );
   };
+
+  const deleteFriendship = (id: number) => handleAdminAction(() => supabase.from('friendships').delete().eq('id', id), 'Friendship removed.');
+  const deleteFollow = (id: number) => handleAdminAction(() => supabase.from('follows').delete().eq('id', id), 'Follow removed.');
+  const deleteHappening = (id: number) => handleAdminAction(() => supabase.from('happenings').delete().eq('id', id), 'Happening deleted.');
   
+
   const TabButton: React.FC<{ tab: string, label: string, count: number }> = ({ tab, label, count }) => (
     <button onClick={() => setActiveTab(tab)} className={`px-3 py-2 text-sm font-medium rounded-md ${activeTab === tab ? 'bg-accent text-primary' : 'text-medium hover:bg-gray-700'}`}>
         {label} <span className="text-xs bg-primary text-light rounded-full px-2 py-0.5">{count}</span>
@@ -129,7 +114,7 @@ const ManageUserModal: React.FC<{ user: UserProfile, onClose: () => void, onData
       <div className="bg-secondary rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
         <header className="flex justify-between items-center p-4 border-b border-gray-700">
             <div className="flex items-center gap-3">
-                <Avatar displayName={user.display_name} />
+                <Avatar displayName={user.display_name} imageUrl={user.avatar_url} />
                 <div>
                     <h2 className="text-xl font-bold text-light">{user.display_name}</h2>
                     <p className="text-sm text-medium">@{user.username}</p>
@@ -138,7 +123,30 @@ const ManageUserModal: React.FC<{ user: UserProfile, onClose: () => void, onData
             </div>
             <button onClick={onClose} className="text-gray-400 hover:text-white"><XMarkIcon className="h-6 w-6" /></button>
         </header>
+
+        {user.is_banned && (
+            <div className="p-4 border-b border-gray-700 bg-red-900/30">
+                <h3 className="text-lg font-semibold text-red-300 mb-2">Ban Status</h3>
+                <p className="text-sm text-medium">Reason: <span className="text-light">{user.ban_reason || 'No reason provided.'}</span></p>
+                {user.banned_at && <p className="text-xs text-medium mt-1">Banned on: {new Date(user.banned_at).toLocaleString()}</p>}
+            </div>
+        )}
         
+        <div className="p-4 border-b border-gray-700">
+            <h3 className="text-lg font-semibold text-light mb-3">Admin Actions</h3>
+            <div className="flex gap-2">
+                <Button 
+                    variant="danger" 
+                    onClick={handleSignOutUser}
+                    loading={actionLoading}
+                    disabled={actionLoading}
+                >
+                    <PowerIcon className="h-4 w-4 mr-2" />
+                    Force Sign Out
+                </Button>
+            </div>
+        </div>
+
         <div className="p-4 border-b border-gray-700 flex flex-wrap gap-2">
             {details && <>
                 <TabButton tab="friends" label="Friends" count={details.friendships.length} />
@@ -162,32 +170,6 @@ const ManageUserModal: React.FC<{ user: UserProfile, onClose: () => void, onData
             </div>
           }
         </main>
-
-        <div className="p-4 border-t border-gray-700 space-y-3 bg-primary/30">
-            <h3 className="text-lg font-semibold text-accent">Ban Management</h3>
-            {user.is_banned ? (
-                <div>
-                    <p><span className="font-semibold text-medium">Status:</span> <span className="text-red-500 font-bold">Banned</span></p>
-                    {user.banned_at && <p><span className="font-semibold text-medium">Banned On:</span> {new Date(user.banned_at).toLocaleString()}</p>}
-                    <p><span className="font-semibold text-medium">Reason:</span> {user.ban_reason || 'N/A'}</p>
-                    <Button variant="secondary" onClick={handleUnbanUser} className="mt-2">Unban User</Button>
-                </div>
-            ) : (
-                <div>
-                    <p><span className="font-semibold text-medium">Status:</span> <span className="text-green-500 font-semibold">Active</span></p>
-                    <label htmlFor="banReason" className="block text-sm font-medium text-medium mb-1 mt-2">Ban Reason</label>
-                    <Input id="banReason" value={banReason} onChange={e => setBanReason(e.target.value)} placeholder="Reason for ban..." />
-                    <Button variant="danger" onClick={handleBanUser} className="mt-2">Ban User</Button>
-                </div>
-            )}
-        </div>
-        
-        <footer className="p-4 border-t border-gray-700 bg-primary/50 rounded-b-lg">
-            <Button variant="danger" className="w-full" onClick={handleDeleteUser}>
-                <TrashIcon className="h-5 w-5 mr-2" /> Delete {user.display_name}
-            </Button>
-            <p className="text-xs text-medium text-center mt-2">Note: Deleting a user is irreversible and removes all their data.</p>
-        </footer>
       </div>
     </div>
   );
@@ -280,7 +262,7 @@ const ManageHappeningModal: React.FC<{
 const ListItem: React.FC<{ user: UserProfile, onDelete: () => void }> = ({ user, onDelete }) => (
     <div className="flex justify-between items-center bg-primary p-2 rounded-md">
         <Link to={`/profile/${user.username}`} className="flex items-center gap-3">
-            <Avatar displayName={user.display_name} size="sm" />
+            <Avatar displayName={user.display_name} imageUrl={user.avatar_url} size="sm" />
             <div>
                 <p className="font-semibold">{user.display_name}</p>
                 <p className="text-xs text-medium">@{user.username}</p>
@@ -362,7 +344,9 @@ const DevPage: React.FC = () => {
                 <h1 className="text-3xl font-bold text-accent mb-4">Developer Panel</h1>
                 <p className="text-medium mb-6">Full administrative control over platform data.</p>
                 
-                <div className="border-b border-gray-800 mb-6">
+                <PlatformStats />
+
+                <div className="border-b border-gray-800 my-6">
                     <nav className="-mb-px flex space-x-4" aria-label="Tabs">
                         <TabButton tab="users" label="User Management" count={users.length} />
                         <TabButton tab="feed" label="Global Feed Management" count={happenings.length} />
@@ -382,6 +366,7 @@ const DevPage: React.FC = () => {
                             <tbody>{users.map((user) => (
                                 <tr key={user.id} className="border-b border-gray-800 hover:bg-gray-800/50">
                                     <td className="p-3 flex items-center">
+                                        <Avatar displayName={user.display_name} imageUrl={user.avatar_url} size="sm" className="mr-3" />
                                         {user.display_name}
                                         {user.is_banned && <span className="ml-2 text-xs bg-red-600 text-light font-bold px-2 py-0.5 rounded-full">BANNED</span>}
                                     </td>

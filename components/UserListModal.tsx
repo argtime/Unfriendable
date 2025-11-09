@@ -59,7 +59,7 @@ const UserListModal: React.FC<UserListModalProps> = ({ title, fetchUsers, onClos
                   onClick={handleClose}
                   className="flex items-center gap-4 p-2 rounded-md hover:bg-primary transition-colors"
                 >
-                  <Avatar displayName={user.display_name} size="md" />
+                  <Avatar displayName={user.display_name} imageUrl={user.avatar_url} size="md" />
                   <div>
                     <p className="font-bold text-light">{user.display_name}</p>
                     <p className="text-sm text-medium">@{user.username}</p>

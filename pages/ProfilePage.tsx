@@ -85,7 +85,7 @@ const ProfilePage: React.FC = () => {
             setProfile(fullProfile);
             setHappenings(profileHappenings.data as Happening[] || []);
             
-            if (currentUserProfile.id !== userData.id) {
+            if (!isUpdate && currentUserProfile.id !== userData.id) {
                 await supabase.from('happenings').insert({ actor_id: currentUserProfile.id, action_type: 'VIEWED_PROFILE', target_id: userData.id });
             }
         } catch(error: any) {
@@ -352,46 +352,45 @@ const ProfilePage: React.FC = () => {
                            ) : !profile.is_banned ? (
                                 <>
                                     <div className="flex gap-2">
-                                        {/* Friendship Button / Dropdown */}
+                                        {/* Friendship Button */}
                                         {profile.is_friend ? (
-                                            <Dropdown trigger={
-                                                <Button variant="secondary" className="w-full"><CheckIcon className="h-5 w-5 mr-2"/>Friends</Button>
-                                            }>
-                                                <Dropdown.Item 
-                                                    onClick={profile.is_best_friend ? onRemoveBestFriend : onMakeBestFriend}
-                                                    disabled={actionLoading === 'addBestFriend' || actionLoading === 'removeBestFriend'}
-                                                >
-                                                    <HeartIcon className="h-5 w-5 mr-2" />
-                                                    {profile.is_best_friend ? 'Remove Best Friend' : 'Make Best Friend'}
-                                                </Dropdown.Item>
-                                                <Dropdown.Item 
-                                                    onClick={onRemoveFriend}
-                                                    disabled={actionLoading === 'removeFriend'}
-                                                    className="text-red-400 hover:!bg-red-500/20 hover:!text-red-300 focus:!bg-red-500/20"
-                                                >
-                                                    <UserMinusIcon className="h-5 w-5 mr-2" />
-                                                    Unfriend
-                                                </Dropdown.Item>
-                                            </Dropdown>
+                                            <Button
+                                                variant="danger"
+                                                onClick={onRemoveFriend}
+                                                loading={actionLoading === 'removeFriend'}
+                                                className="w-full"
+                                            >
+                                                <UserMinusIcon className="h-5 w-5 mr-2" />
+                                                Unfriend
+                                            </Button>
                                         ) : profile.is_friend_pending_me ? (
-                                            <Button onClick={onAcceptFriend} loading={actionLoading === 'acceptFriend'} className="w-full"><CheckIcon className="h-5 w-5 mr-2" />Accept Friend Request</Button>
+                                            <Button onClick={onAcceptFriend} loading={actionLoading === 'acceptFriend'} className="w-full"><CheckIcon className="h-5 w-5 mr-2" />Accept Request</Button>
                                         ) : profile.is_friend_pending_them ? (
-                                            <Button disabled className="w-full">Friend Request Sent</Button>
+                                            <Button disabled className="w-full">Request Sent</Button>
                                         ) : (
                                             <Button onClick={onAddFriend} loading={actionLoading === 'addFriend'} className="w-full"><UserPlusIcon className="h-5 w-5 mr-2" />Add Friend</Button>
                                         )}
 
                                         {/* Follow Action */}
                                         {profile.is_following ? (
-                                            <Button variant="secondary" onClick={onUnfollow} loading={actionLoading === 'unfollow'} className="w-full"><WifiIcon className="h-5 w-5 -rotate-45" />Unfollow</Button>
+                                            <Button variant="secondary" onClick={onUnfollow} loading={actionLoading === 'unfollow'}><WifiIcon className="h-5 w-5 -rotate-45" /></Button>
                                         ) : (
-                                            <Button variant="secondary" onClick={onFollow} loading={actionLoading === 'follow'} className="w-full"><RssIcon className="h-5 w-5 mr-2" />Follow</Button>
+                                            <Button variant="secondary" onClick={onFollow} loading={actionLoading === 'follow'}><RssIcon className="h-5 w-5" /></Button>
                                         )}
                                         
                                         {/* Other Actions Dropdown */}
                                         <Dropdown trigger={
                                             <Button variant="secondary" className="!p-3"><EllipsisHorizontalIcon className="h-5 w-5" /></Button>
-                                        } contentClasses="w-48">
+                                        } contentClasses="w-56">
+                                            {profile.is_friend && (
+                                                 <Dropdown.Item 
+                                                    onClick={profile.is_best_friend ? onRemoveBestFriend : onMakeBestFriend}
+                                                    disabled={actionLoading === 'addBestFriend' || actionLoading === 'removeBestFriend'}
+                                                >
+                                                    <HeartIcon className="h-5 w-5 mr-2" />
+                                                    {profile.is_best_friend ? 'Remove Best Friend' : 'Make Best Friend'}
+                                                </Dropdown.Item>
+                                            )}
                                             <Dropdown.Item 
                                                 onClick={profile.is_hidden ? onUnhideUser : onHideUser}
                                                 disabled={actionLoading === 'hide' || actionLoading === 'unhide'}

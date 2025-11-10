@@ -7,6 +7,7 @@ import FeedItem from '../components/FeedItem';
 import { useAuth } from '../hooks/useAuth';
 import PendingFriendRequests from '../components/PendingFriendRequests';
 import FeedSkeleton from '../components/ui/FeedSkeleton';
+import UnfriendCounter from '../components/UnfriendCounter';
 
 const happeningTypes: { value: HappeningType; label: string }[] = [
   { value: 'CREATED_ACCOUNT', label: 'Account Creations' },
@@ -170,6 +171,7 @@ const HomePage: React.FC = () => {
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">
+      <UnfriendCounter />
       <PendingFriendRequests key={refreshRequests} />
 
       <div>

@@ -15,9 +15,16 @@ const SearchPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [localQuery, setLocalQuery] = useState(query || '');
 
+  // Sync local input state with URL search parameter to keep the UI consistent.
+  useEffect(() => {
+    setLocalQuery(query || '');
+  }, [query]);
+
   useEffect(() => {
     const performSearch = async () => {
-      if (!query) {
+      // Re-read from the latest searchParams inside the effect
+      const currentQuery = searchParams.get('q');
+      if (!currentQuery) {
         setResults([]);
         setLoading(false);
         return;
@@ -25,23 +32,26 @@ const SearchPage: React.FC = () => {
       setLoading(true);
       setError(null);
 
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .or(`username.ilike.%${query}%,display_name.ilike.%${query}%`)
-        .limit(25);
+      try {
+        const { data, error: searchError } = await supabase
+          .from('users')
+          .select('*')
+          .or(`username.ilike.%${currentQuery}%,display_name.ilike.%${currentQuery}%`)
+          .limit(25);
 
-      if (error) {
-        setError('Failed to fetch search results.');
-        console.error(error);
-      } else {
+        if (searchError) throw searchError;
+        
         setResults(data || []);
+      } catch (err: any) {
+        setError('Failed to fetch search results.');
+        console.error(err);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     performSearch();
-  }, [query]);
+  }, [searchParams]); // Depend on the searchParams object itself for re-fetching.
   
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();

@@ -26,10 +26,15 @@
           keyframes: {
             shimmer: {
               '100%': { transform: 'translateX(100%)' },
+            },
+            'fade-in': {
+              '0%': { opacity: '0' },
+              '100%': { opacity: '1' },
             }
           },
           animation: {
-            shimmer: 'shimmer 1.5s infinite linear'
+            shimmer: 'shimmer 1.5s infinite linear',
+            'fade-in': 'fade-in 0.5s ease-out'
           }
         },
       },

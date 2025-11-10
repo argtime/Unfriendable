@@ -48,6 +48,10 @@ const HomePage: React.FC = () => {
         .from('happenings')
         .select('*, actor:actor_id(*), target:target_id(*)');
 
+      if (!profile.show_profile_views) {
+        query = query.not('action_type', 'eq', 'VIEWED_PROFILE');
+      }
+
       if (filterType !== 'all') {
         query = query.eq('action_type', filterType);
       }

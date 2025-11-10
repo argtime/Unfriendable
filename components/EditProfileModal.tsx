@@ -107,12 +107,12 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({ userProfile, onClos
           </div>
           <div className="border-t border-gray-700/50 pt-4">
              <ToggleSwitch
-                label="Publicize Profile Views"
+                label="Show Profile Views in Feed"
                 enabled={showProfileViews}
                 setEnabled={setShowProfileViews}
               />
               <p className="text-xs text-medium mt-2">
-                When enabled, other users will see a "viewed your profile" event in their feed. This is disabled by default.
+                When enabled, you will see 'profile view' events in your feed. This is disabled by default for all users.
               </p>
           </div>
           <div>

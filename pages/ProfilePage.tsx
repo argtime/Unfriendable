@@ -85,7 +85,7 @@ const ProfilePage: React.FC = () => {
             setProfile(fullProfile);
             setHappenings(profileHappenings.data as Happening[] || []);
             
-            if (currentUserProfile.id !== userData.id && userData.show_profile_views) {
+            if (currentUserProfile.id !== userData.id) {
                 await supabase.from('happenings').insert({ actor_id: currentUserProfile.id, action_type: 'VIEWED_PROFILE', target_id: userData.id });
             }
         } catch(error: any) {
@@ -101,9 +101,8 @@ const ProfilePage: React.FC = () => {
     }, [fetchProfileData]);
 
     useEffect(() => {
-        if (!profile) return;
+        if (!profile?.id || !profile?.username) return;
 
-        // Fix: Use ReturnType<typeof setTimeout> for browser compatibility.
         let refreshTimeout: ReturnType<typeof setTimeout>;
         const handleUpdate = (payload: any) => {
             console.log('Change received, queuing profile data refresh', payload.table);
@@ -113,7 +112,8 @@ const ProfilePage: React.FC = () => {
             }, 500); // Debounce updates by 500ms
         };
 
-        const profileChannel = supabase.channel(`profile-page-${profile.id}`)
+        const channelId = `profile-page-${profile.id}`;
+        const profileChannel = supabase.channel(channelId)
             .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'users', filter: `id=eq.${profile.id}` }, handleUpdate)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'happenings', filter: `or(actor_id.eq.${profile.id},target_id.eq.${profile.id})` }, handleUpdate)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'friendships', filter: `or(user_id_1.eq.${profile.id},user_id_2.eq.${profile.id})` }, handleUpdate)
@@ -134,7 +134,7 @@ const ProfilePage: React.FC = () => {
             clearTimeout(refreshTimeout);
             supabase.removeChannel(profileChannel);
         };
-    }, [profile, fetchProfileData]);
+    }, [profile?.id, profile?.username, fetchProfileData]);
 
 
     const handleAction = async (actionName: string, actionFn: () => Promise<any>, successMessage: string) => {

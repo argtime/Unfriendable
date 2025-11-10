@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect, useContext, ReactNode } from 'react';
+import React, { createContext, useState, useEffect, useContext, ReactNode, useMemo, useCallback } from 'react';
 import { User } from '@supabase/supabase-js';
 import { supabase } from '../services/supabase';
 import { AuthContextType, UserProfile } from '../types';
@@ -69,13 +69,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
   }, []);
   
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     await supabase.auth.signOut();
     // State clearing is handled by the onAuthStateChange listener.
-  };
+  }, []);
 
 
-  const value = {
+  const value = useMemo(() => ({
     user,
     profile,
     loading,
@@ -83,7 +83,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     isViewOnly,
     paymentRequired,
     signOut
-  };
+  }), [user, profile, loading, isDev, isViewOnly, paymentRequired, signOut]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

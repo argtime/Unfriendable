@@ -8,12 +8,4 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error("Supabase URL and Anon Key must be provided.");
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  global: {
-    headers: {
-      'Cache-Control': 'no-cache, no-store, must-revalidate',
-      'Pragma': 'no-cache',
-      'Expires': '0',
-    },
-  },
-});
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);

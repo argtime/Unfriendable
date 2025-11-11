@@ -19,13 +19,36 @@ const SignupPage: React.FC = () => {
   const [coverImageUrl, setCoverImageUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  
+  const [usernameError, setUsernameError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    let isValid = true;
+    const usernameRegex = /^[a-zA-Z0-9_]{3,20}$/;
+    if (!usernameRegex.test(username)) {
+      setUsernameError('Must be 3-20 characters using only letters, numbers, or underscores.');
+      isValid = false;
+    } else {
+      setUsernameError('');
+    }
+
+    if (password.length < 6) {
+      setPasswordError('Password must be at least 6 characters.');
+      isValid = false;
+    } else {
+      setPasswordError('');
+    }
+
     if (bio.length > 250) {
       toast.error("Bio cannot be longer than 250 characters.");
-      return;
+      isValid = false;
     }
+
+    if (!isValid) return;
+
     setLoading(true);
 
     const { data, error } = await supabase.auth.signUp({
@@ -33,7 +56,7 @@ const SignupPage: React.FC = () => {
       password,
       options: {
         data: {
-          username: username,
+          username: username.toLowerCase(),
           display_name: displayName,
           avatar_url: avatarUrl || null,
           cover_image_url: coverImageUrl || null,
@@ -45,7 +68,14 @@ const SignupPage: React.FC = () => {
     setLoading(false);
 
     if (error) {
-      toast.error(error.message);
+       if (error.message.includes('users_username_key')) {
+        toast.error('This username is already taken.');
+        setUsernameError('This username is already taken.');
+      } else if (error.message.includes('duplicate key value violates unique constraint')) {
+        toast.error('An account with this email already exists.');
+      } else {
+        toast.error(error.message);
+      }
     } else if (data.user) {
       if (data.session) {
         // User is already logged in
@@ -75,10 +105,12 @@ const SignupPage: React.FC = () => {
             <div>
               <label className="block text-sm font-medium text-medium mb-1">Password</label>
               <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="Min. 6 characters" />
+              {passwordError && <p className="text-red-500 text-xs mt-1">{passwordError}</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-medium mb-1">Username</label>
               <Input type="text" value={username} onChange={(e) => setUsername(e.target.value)} required placeholder="unique_username" />
+              {usernameError && <p className="text-red-500 text-xs mt-1">{usernameError}</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-medium mb-1">Display Name</label>

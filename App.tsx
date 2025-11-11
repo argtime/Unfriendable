@@ -15,6 +15,8 @@ const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 const DevPage = lazy(() => import('./pages/DevPage'));
 const SearchPage = lazy(() => import('./pages/SearchPage'));
 const PaymentRequiredPage = lazy(() => import('./pages/PaymentRequiredPage'));
+const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'));
+const UpdatePasswordPage = lazy(() => import('./pages/UpdatePasswordPage'));
 
 const RootRedirect: React.FC = () => {
   const { user, loading } = useAuth();
@@ -48,6 +50,8 @@ const AppRoutes: React.FC = () => {
         <Route path="/" element={<RootRedirect />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/update-password" element={<UpdatePasswordPage />} />
         <Route path="/home" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
         <Route path="/profile/:username" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
         <Route path="/dev" element={<ProtectedRoute><DevPage /></ProtectedRoute>} />

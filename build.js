@@ -1,4 +1,3 @@
-
 import esbuild from 'esbuild';
 import fs from 'fs/promises';
 import path from 'path';
@@ -12,7 +11,7 @@ async function build() {
     // 1. Clean and create dist directory
     console.log(`Cleaning directory: ${distDir}`);
     await fs.rm(distDir, { recursive: true, force: true });
-    await fs.mkdir(distDir);
+    await fs.mkdir(distDir, { recursive: true });
 
     // 2. Build the TSX file with esbuild
     console.log('Bundling application with esbuild...');
@@ -40,10 +39,10 @@ async function build() {
 
     // Find the generated JS bundle name from the metafile
     const outputFilename = Object.keys(result.metafile.outputs).find(
-        (out) => out.endsWith('.js')
+      (out) => out.endsWith('.js')
     );
     if (!outputFilename) {
-        throw new Error('Could not find output JS bundle in metafile.');
+      throw new Error('Could not find output JS bundle in metafile.');
     }
     const bundleName = path.basename(outputFilename);
     console.log(`Generated bundle: ${bundleName}`);
@@ -59,6 +58,16 @@ async function build() {
     // 4. Create .nojekyll for gh-pages
     await fs.writeFile(path.join(distDir, '.nojekyll'), '');
     console.log('.nojekyll file created.');
+
+    // 5. Create CNAME for GitHub Pages if a custom domain is provided
+    // Provide the custom domain via env var: CUSTOM_DOMAIN=ryham.me node build.js
+    const customDomain = process.env.CUSTOM_DOMAIN || process.env.CNAME || '';
+    if (customDomain) {
+      await fs.writeFile(path.join(distDir, 'CNAME'), customDomain.trim() + '\n', 'utf-8');
+      console.log(`CNAME file created with domain: ${customDomain}`);
+    } else {
+      console.log('No CUSTOM_DOMAIN/CNAME env var provided — skipping CNAME creation.');
+    }
 
     console.log('Build successful!');
   } catch (error) {
